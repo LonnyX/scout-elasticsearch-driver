@@ -86,6 +86,7 @@ class ElasticEngine extends Engine
     public function buildSearchQueryPayloadCollection(Builder $builder, array $options = [])
     {
         $payloadCollection = collect();
+        $withFunction = false;
 
         if ($builder instanceof SearchBuilder) {
             $searchRules = $builder->rules ?: $builder->model->getSearchRules();
@@ -100,7 +101,13 @@ class ElasticEngine extends Engine
                     $ruleEntity = new $rule($builder);
 
                     if ($ruleEntity->isApplicable()) {
-                        $payload->setIfNotEmpty('body.query.bool', $ruleEntity->buildQueryPayload());
+
+                        if(method_exists($ruleEntity, 'buildFunctionQueryPayload')) {
+                            $withFunction = true;
+                            $payload->setIfNotEmpty('body.query', $ruleEntity->buildFunctionQueryPayload());                            
+                        }else {
+                            $payload->setIfNotEmpty('body.query.bool', $ruleEntity->buildQueryPayload());
+                        }
 
                         if ($options['highlight'] ?? true) {
                             $payload->setIfNotEmpty('body.highlight', $ruleEntity->buildHighlightPayload());
@@ -119,7 +126,7 @@ class ElasticEngine extends Engine
             $payloadCollection->push($payload);
         }
 
-        return $payloadCollection->map(function (TypePayload $payload) use ($builder, $options) {
+        return $payloadCollection->map(function (TypePayload $payload) use ($builder, $options, $withFunction) {
             $payload
                 ->setIfNotEmpty('body._source', $builder->select)
                 ->setIfNotEmpty('body.collapse.field', $builder->collapse)
@@ -131,7 +138,12 @@ class ElasticEngine extends Engine
 
 
             foreach ($builder->wheres as $clause => $filters) {
-                $clauseKey = 'body.query.bool.filter.bool.' . $clause;
+                if($withFunction) {
+                    $clauseKey = 'body.query.function_score.query.bool.filter.bool.' . $clause;
+
+                }else {
+                    $clauseKey = 'body.query.bool.filter.bool.' . $clause;
+                }
 
                 $clauseValue = array_merge(
                     $payload->get($clauseKey, []),
