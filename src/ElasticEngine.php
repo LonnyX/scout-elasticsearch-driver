@@ -280,7 +280,7 @@ class ElasticEngine extends Engine
     /**
      * @inheritdoc
      */
-    public function map($results, $model)
+    public function map(Builder $builder, $results, $model)
     {
         if ($this->getTotalCount($results) == 0) {
             return Collection::make();
@@ -298,9 +298,9 @@ class ElasticEngine extends Engine
 
         $ids = $this->mapIds($results)->all();
 
-        $builder = $model->usesSoftDelete() ? $model->withTrashed() : $model->newQuery();
+        $query = $model::usesSoftDelete() ? $model->withTrashed() : $model->newQuery();
 
-        $models = $builder
+        $models = $query
             ->whereIn($primaryKey, $ids)
             ->get($columns)
             ->keyBy($primaryKey);
@@ -329,5 +329,17 @@ class ElasticEngine extends Engine
     public function getTotalCount($results)
     {
         return $results['hits']['total'];
+    }
+
+    /**
+     * @inheritdoc
+     */
+    public function flush($model)
+    {
+        $query = $model::usesSoftDelete() ? $model->withTrashed() : $model->newQuery();
+
+        $query
+            ->orderBy($model->getKeyName())
+            ->unsearchable();
     }
 }
