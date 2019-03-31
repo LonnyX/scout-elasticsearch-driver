@@ -285,6 +285,9 @@ class ElasticEngine extends Engine
         if ($this->getTotalCount($results) == 0) {
             return Collection::make();
         }
+        if($model->collectWithoutDB) {
+            return $this->collectWithoutDB($results, $model);
+        }
 
         $primaryKey = $model->getKeyName();
 
@@ -318,6 +321,21 @@ class ElasticEngine extends Engine
 
                     return $model;
                 }
+            })
+            ->filter()
+            ->values();
+    }
+
+    public function collectWithoutDB($results, $model)
+    {
+        return Collection::make($results['hits']['hits'])
+            ->map(function ($hit) use ($model) {
+                $model = (new $model());
+                $model->id = $hit['_id'];
+                foreach($hit[ '_source'] as $key => $value) {
+                    $model->{$key} = is_array($value) ? (object)$value : $value;
+                }
+                return $model;
             })
             ->filter()
             ->values();
